@@ -1,0 +1,7 @@
+require('dotenv').config();
+
+module.exports = {
+  port: Number(process.env.PORT) || 3000,
+  mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/crash',
+  ingestKey: process.env.INGEST_KEY || 'change-me',
+};

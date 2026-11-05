@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crash Analytics</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Crash Analytics</h1>
+    <nav>
+      <button data-tab="live" class="active">Live</button>
+      <button data-tab="rounds">Rounds</button>
+      <button data-tab="players">Players</button>
+      <button data-tab="stats">Stats</button>
+    </nav>
+    <span id="conn" class="pill off">offline</span>
+  </header>
+
+  <main>
+    <!-- LIVE -->
+    <section id="tab-live" class="tab active">
+      <div id="recent" class="recent"></div>
+      <div class="cards">
+        <div class="card big"><label>Round</label><div id="l-game">–</div><small id="l-status"></small></div>
+        <div class="card big"><label>Multiplier</label><div id="l-mult" class="mult">–</div></div>
+        <div class="card"><label>Players</label><div id="l-players">0</div></div>
+        <div class="card"><label>Wagered</label><div id="l-wager">$0</div></div>
+        <div class="card"><label>Cashed out</label><div id="l-cashed">0</div></div>
+        <div class="card"><label>Players P/L</label><div id="l-pnl">$0</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Player</th><th>Type</th><th class="r">Bet</th><th class="r">Bet (USD)</th><th class="r">Result</th><th class="r">Profit (USD)</th></tr></thead>
+        <tbody id="l-bets"></tbody>
+      </table>
+    </section>
+
+    <!-- ROUNDS -->
+    <section id="tab-rounds" class="tab">
+      <div class="toolbar">
+        <label>Crash ≥ <input id="r-min" type="number" step="0.01" placeholder="any"></label>
+        <label>Crash &lt; <input id="r-max" type="number" step="0.01" placeholder="any"></label>
+        <button id="r-apply">Filter</button>
+      </div>
+      <table>
+        <thead><tr><th>Round</th><th>Time</th><th class="r">Crash</th><th class="r">Players</th><th class="r">Winners</th><th class="r">Wagered</th><th class="r">Players P/L</th></tr></thead>
+        <tbody id="r-body"></tbody>
+      </table>
+      <button id="r-more" class="more">Load more</button>
+    </section>
+
+    <!-- PLAYERS -->
+    <section id="tab-players" class="tab">
+      <div class="toolbar">
+        <input id="p-q" type="search" placeholder="Search name…">
+        <label>Sort
+          <select id="p-sort">
+            <option value="profitUsd">Profit</option>
+            <option value="wageredUsd">Wagered</option>
+            <option value="rounds">Rounds</option>
+            <option value="bets">Bets</option>
+            <option value="wins">Wins</option>
+            <option value="biggestWinUsd">Biggest win</option>
+            <option value="biggestLossUsd">Biggest loss</option>
+            <option value="bestMultiplier">Best multiplier</option>
+            <option value="lastSeen">Last seen</option>
+          </select>
+        </label>
+        <select id="p-order"><option value="desc">High → low</option><option value="asc">Low → high</option></select>
+        <span id="p-total" class="muted"></span>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th class="r">Rounds</th><th class="r">Bets</th><th class="r">Win %</th><th class="r">Wagered</th><th class="r">Profit</th><th class="r">ROI</th><th class="r">Biggest win</th><th class="r">Biggest loss</th><th class="r">Best x</th><th>Last seen</th></tr></thead>
+        <tbody id="p-body"></tbody>
+      </table>
+      <div class="pager"><button id="p-prev">‹ Prev</button><span id="p-page"></span><button id="p-next">Next ›</button></div>
+    </section>
+
+    <!-- STATS -->
+    <section id="tab-stats" class="tab">
+      <div class="cards" id="s-cards"></div>
+      <h3>Crash point distribution</h3>
+      <div id="s-dist" class="dist"></div>
+    </section>
+  </main>
+
+  <!-- Detail drawer (round or player) -->
+  <aside id="drawer" hidden>
+    <button id="d-close" aria-label="Close">×</button>
+    <div id="d-body"></div>
+  </aside>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
