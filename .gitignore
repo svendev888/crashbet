@@ -2,3 +2,6 @@ node_modules/
 .env
 .browser-profile/
 captures/
+.bot-profile/
+copybot-log.jsonl
+.copybot-stop

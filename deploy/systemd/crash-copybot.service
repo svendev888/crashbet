@@ -1,0 +1,15 @@
+[Unit]
+Description=Crash copy bot (real bets; Chrome on virtual display :99)
+After=crash-xvfb.service network-online.target
+Requires=crash-xvfb.service
+
+[Service]
+WorkingDirectory=/root/crashbet
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/env node collector/copybot.js
+Restart=always
+RestartSec=15
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

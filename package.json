@@ -8,6 +8,7 @@
     "simulate": "node collector/simulate.js",
     "capture": "node collector/bcgame.js --capture",
     "collect": "node collector/bcgame.js",
+    "copybot": "node collector/copybot.js",
     "analyze": "node collector/analyze-capture.js",
     "replay": "node collector/replay.js"
   },
