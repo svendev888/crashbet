@@ -1,8 +1,11 @@
 const express = require('express');
 const { Round, Bet, Player } = require('./models');
+const fairness = require('./fairness');
 
 const clampInt = (v, def, min, max) => Math.min(max, Math.max(min, parseInt(v, 10) || def));
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Only what the round detail view shows (keeps responses small over a remote DB).
+const BET_FIELDS = { _id: 0, playerId: 1, name: 1, kind: 1, slot: 1, side: 1, payout: 1, amount: 1, currency: 1, usd: 1, cashedAt: 1, won: 1, profitUsd: 1 };
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);
 
 function createRoutes(live, ingestKey) {
@@ -28,14 +31,18 @@ function createRoutes(live, ingestKey) {
       if (req.query.minCrash) q.crash.$gte = Number(req.query.minCrash);
       if (req.query.maxCrash) q.crash.$lt = Number(req.query.maxCrash);
     }
-    res.json(await Round.find(q).sort({ endedAt: -1 }).limit(limit).lean());
+    const rows = await Round.find(q).sort({ endedAt: -1 }).limit(limit).lean();
+    res.json(rows.map((row) => ({ ...row, fair: fairness.verified(row) })));
   }));
 
   r.get('/api/rounds/:gameId', wrap(async (req, res) => {
     const round = await Round.findOne({ gameId: req.params.gameId }).lean();
     if (!round) return res.status(404).json({ error: 'not found' });
-    const bets = await Bet.find({ gameId: req.params.gameId }).sort({ usd: -1 }).lean();
-    res.json({ round, bets });
+    const [bets, prev] = await Promise.all([
+      Bet.find({ gameId: req.params.gameId }, BET_FIELDS).sort({ usd: -1 }).limit(clampInt(req.query.bets, 100, 1, 100000)).lean(),
+      Round.findOne({ gameId: String(Number(req.params.gameId) - 1) }, { hash: 1 }).lean(),
+    ]);
+    res.json({ round, bets, fairness: fairness.explain(round, prev && prev.hash) });
   }));
 
   // All-time player totals. ?sort=profitUsd&order=desc&limit=&skip=&q=<name>
@@ -58,6 +65,15 @@ function createRoutes(live, ingestKey) {
     if (!player) return res.status(404).json({ error: 'not found' });
     const bets = await Bet.find({ playerId: req.params.id }).sort({ at: -1 }).limit(200).lean();
     res.json({ player, bets });
+  }));
+
+  // Compact series of the last N rounds, oldest first, for the Analysis charts.
+  r.get('/api/analysis', wrap(async (req, res) => {
+    const limit = clampInt(req.query.limit, 500, 10, 20000);
+    const rows = await Round.find({}, {
+      _id: 0, gameId: 1, crash: 1, endedAt: 1, wageredUsd: 1, playersProfitUsd: 1, betCount: 1, playerCount: 1, partial: 1,
+    }).sort({ endedAt: -1 }).limit(limit).lean();
+    res.json(rows.reverse());
   }));
 
   r.get('/api/stats', wrap(async (req, res) => {

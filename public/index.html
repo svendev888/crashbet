@@ -13,6 +13,7 @@
       <button data-tab="live" class="active">Live</button>
       <button data-tab="rounds">Rounds</button>
       <button data-tab="players">Players</button>
+      <button data-tab="analysis">Analysis</button>
       <button data-tab="stats">Stats</button>
     </nav>
     <span id="conn" class="pill off">offline</span>
@@ -30,6 +31,7 @@
         <div class="card"><label>Cashed out</label><div id="l-cashed">0</div></div>
         <div class="card"><label>Players P/L</label><div id="l-pnl">$0</div></div>
       </div>
+      <div id="l-fair" class="fair-grid"></div>
       <table>
         <thead><tr><th>Player</th><th>Type</th><th class="r">Bet</th><th class="r">Bet (USD)</th><th class="r">Result</th><th class="r">Profit (USD)</th></tr></thead>
         <tbody id="l-bets"></tbody>
@@ -44,7 +46,7 @@
         <button id="r-apply">Filter</button>
       </div>
       <table>
-        <thead><tr><th>Round</th><th>Time</th><th class="r">Crash</th><th class="r">Players</th><th class="r">Winners</th><th class="r">Wagered</th><th class="r">Players P/L</th></tr></thead>
+        <thead><tr><th>Round</th><th title="Crash point re-calculated from the round hash">Verified</th><th>Time</th><th class="r">Crash</th><th class="r">Players</th><th class="r">Winners</th><th class="r">Wagered</th><th class="r">Players P/L</th></tr></thead>
         <tbody id="r-body"></tbody>
       </table>
       <button id="r-more" class="more">Load more</button>
@@ -77,6 +79,57 @@
       <div class="pager"><button id="p-prev">‹ Prev</button><span id="p-page"></span><button id="p-next">Next ›</button></div>
     </section>
 
+    <!-- ANALYSIS -->
+    <section id="tab-analysis" class="tab">
+      <div class="toolbar">
+        <label>Rounds
+          <select id="a-limit">
+            <option value="100">Last 100</option>
+            <option value="500" selected>Last 500</option>
+            <option value="1000">Last 1,000</option>
+            <option value="5000">Last 5,000</option>
+            <option value="20000">Last 20,000</option>
+          </select>
+        </label>
+        <span id="a-info" class="muted"></span>
+      </div>
+      <div class="cards" id="a-tiles"></div>
+
+      <div class="chart-card">
+        <h3>Crash point per round</h3>
+        <p class="muted sub">Log scale. Lines mark 2x and 10x. Click a column to open the round.</p>
+        <div id="a-history" class="chart"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>How often each multiplier is reached</h3>
+        <p class="muted sub">Share of rounds that reached at least x, compared with the provably-fair expectation (99% ÷ x).</p>
+        <div class="legend"><span><i class="key s1"></i>Observed</span><span><i class="key s2"></i>Expected</span></div>
+        <div id="a-survival" class="chart"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Players' profit / loss per round (USD)</h3>
+        <p class="muted sub">Above zero: players won more than they bet. Below zero: the house won.</p>
+        <div class="legend"><span><i class="swatch s1"></i>Players won</span><span><i class="swatch s3"></i>House won</span></div>
+        <div id="a-pnl" class="chart"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Wagered per round (USD)</h3>
+        <div id="a-wager" class="chart"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Thresholds and streaks</h3>
+        <p class="muted sub">"Drought" is the number of rounds in a row without reaching the target. Past rounds do not change the odds of the next one.</p>
+        <table>
+          <thead><tr><th>Target</th><th class="r">Hits</th><th class="r">Observed</th><th class="r">Expected</th><th class="r">Rounds since last</th><th class="r">Longest drought</th><th class="r">Average gap (expected)</th></tr></thead>
+          <tbody id="a-thresholds"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- STATS -->
     <section id="tab-stats" class="tab">
       <div class="cards" id="s-cards"></div>
@@ -92,6 +145,8 @@
   </aside>
 
   <script src="/socket.io/socket.io.js"></script>
+  <div id="tip" class="tip" hidden></div>
   <script src="app.js"></script>
+  <script src="analysis.js"></script>
 </body>
 </html>

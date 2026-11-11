@@ -15,7 +15,7 @@ const chipCls = (c) => (c < 2 ? 'lo' : c < 10 ? 'mid' : 'hi');
 const api = (path) => fetch(path).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
 // ---------- tabs ----------
-const loaders = { rounds: () => loadRounds(true), players: () => loadPlayers(), stats: () => loadStats() };
+const loaders = { rounds: () => loadRounds(true), players: () => loadPlayers(), stats: () => loadStats(), analysis: () => loadAnalysis() };
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('nav button').forEach((n) => n.classList.toggle('active', n === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
@@ -28,7 +28,41 @@ socket.on('connect', () => { $('conn').textContent = 'live'; $('conn').className
 socket.on('disconnect', () => { $('conn').textContent = 'offline'; $('conn').className = 'pill off'; });
 socket.on('live', renderLive);
 
-function renderLive({ round, recent }) {
+// Provably-fair values on the Live tab: current round (commitment) + last finished round (full calculation).
+let lastFairKey = '';
+function renderLiveFair(fair, round) {
+  if (!fair) return;
+  const cur = fair.current;
+  const key = JSON.stringify([cur && cur.gameId, cur && cur.status, cur && cur.crash, cur && cur.commitment, fair.last && fair.last.gameId]);
+  if (key === lastFairKey) return; // avoid rebuilding on every tick
+  lastFairKey = key;
+  let curHtml = '';
+  if (cur) {
+    const state = cur.status === 'betting' ? 'Betting is open'
+      : cur.status === 'running' ? 'Running'
+      : cur.status === 'crashed' ? `Crashed at <b>${x(cur.crash)}</b> — BC.Game reveals the hash in a few seconds` : esc(cur.status);
+    const prevId = Number(cur.gameId) - 1;
+    curHtml = `<div class="fair">
+      <h3>Current round #${esc(cur.gameId)} <span class="badge wait">${cur.status === 'crashed' ? 'revealing' : 'hidden'}</span></h3>
+      <ol>
+        <li><div class="st"><b>Status</b></div><code class="v">${state}</code></li>
+        <li><div class="st"><b>Round hash</b><code class="f">secret until the round ends, so nobody can calculate the crash in advance</code></div><code class="v muted">????????????????????????????????????????????????????????????????</code></li>
+        <li><div class="st"><b>Commitment</b><code class="f">SHA-256(this round's hash) must equal the hash of round #${prevId}</code></div>
+          <code class="v">${cur.commitment ? esc(cur.commitment) : '<span class="muted">not known yet (previous round not seen)</span>'}</code></li>
+        <li><div class="st"><b>Salt</b><code class="f">fixed, Bitcoin block #967,100</code></div><code class="v">${esc(fair.salt)}</code></li>
+      </ol>
+      <p class="muted small">When the round ends, its hash is checked against this commitment and the crash point is recalculated from it.</p>
+    </div>`;
+  }
+  const last = fair.last;
+  const lastHtml = last
+    ? fairnessHtml(last).replace('How this crash point was calculated', `Last round #${esc(last.gameId)} — ${x(last.crash)}`)
+    : '<div class="fair"><h3>Last round</h3><p class="muted">Waiting for a round to finish…</p></div>';
+  $('l-fair').innerHTML = curHtml + lastHtml;
+}
+
+function renderLive({ round, recent, fair }) {
+  renderLiveFair(fair, round);
   $('recent').innerHTML = (recent || []).map((r) => `<span class="chip ${chipCls(r.crash)}" data-game="${esc(r.gameId)}">${x(r.crash)}</span>`).join('');
   if (!round) return;
   $('l-game').textContent = '#' + round.gameId;
@@ -79,6 +113,7 @@ async function loadRounds(reset) {
   $('r-more').hidden = rows.length < 50;
   $('r-body').insertAdjacentHTML('beforeend', rows.map((r) => `<tr class="click" data-game="${esc(r.gameId)}">
     <td>#${esc(r.gameId)}${r.partial ? ' <span class="muted" title="Collector joined mid-round">*</span>' : ''}</td>
+    <td>${r.fair === true ? '<span class="pos" title="Crash point re-calculated from the hash and it matches">✓</span>' : r.fair === false ? '<span class="neg" title="Calculated crash point does not match">✗</span>' : '<span class="muted">–</span>'}</td>
     <td>${time(r.endedAt)}</td>
     <td class="r"><span class="chip ${chipCls(r.crash)}">${x(r.crash)}</span></td>
     <td class="r">${r.playerCount}</td><td class="r">${r.winners}</td>
@@ -145,11 +180,44 @@ function openDrawer(html) { $('d-body').innerHTML = html; $('drawer').hidden = f
 $('d-close').onclick = () => { $('drawer').hidden = true; };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('drawer').hidden = true; });
 
-async function showRound(gameId) {
+// Step-by-step provably-fair calculation for one round.
+function fairnessHtml(f) {
+  if (!f) return '';
+  if (!f.available) return `<div class="fair"><h3>How this crash point was calculated</h3><p class="muted">${esc(f.reason)}</p></div>`;
+  const ok = (b) => (b ? '<span class="pos">✓ yes</span>' : '<span class="neg">✗ no</span>');
+  const chain = f.chain.linked == null
+    ? '<span class="muted">previous round not saved, cannot check</span>'
+    : f.chain.linked ? '<span class="pos">✓ equals the previous round\'s hash</span>' : '<span class="neg">✗ does not match the previous round\'s hash</span>';
+  const step = (n, title, formula, value) => `<li><div class="st"><b>${n}. ${title}</b>${formula ? `<code class="f">${formula}</code>` : ''}</div><code class="v">${value}</code></li>`;
+  return `<div class="fair">
+    <h3>How this crash point was calculated ${f.matches ? '<span class="badge ok">verified</span>' : '<span class="badge bad">mismatch</span>'}</h3>
+    <ol>
+      ${step(1, 'Round hash', 'revealed by BC.Game when the round ends', esc(f.hash))}
+      ${step(2, 'Salt', esc(f.saltSource), esc(f.salt))}
+      ${step(3, 'HMAC', 'HMAC_SHA256(key = salt, message = hash bytes)', `<mark>${esc(f.hex)}</mark>${esc(f.hmac.slice(13))}`)}
+      ${step(4, 'Take the first 13 hex characters (52 bits)', `0x${esc(f.hex)} =`, f.r.toLocaleString('en-US'))}
+      ${step(5, 'Turn it into a number between 0 and 1', `X = ${f.r.toLocaleString('en-US')} ÷ 2^52 (9 significant digits)`, f.x)}
+      ${step(6, 'Apply the 1% house edge', `99 ÷ (1 − ${f.x})`, f.y.toFixed(6))}
+      ${step(7, 'Round down to 2 decimals (minimum 1.00x)', `max(1, floor(${f.y.toFixed(4)}) ÷ 100)`, `<b>${x(f.crash)}</b>`)}
+    </ol>
+    <p>Recorded crash ${x(f.recorded)} — calculated result matches: ${ok(f.matches)}</p>
+    <p>Hash chain: SHA-256(this hash) = <code>${esc(f.chain.sha256OfHash.slice(0, 16))}…</code> ${chain}</p>
+    <p class="muted small">Because every hash is the SHA-256 of the next round's hash, the results were fixed before anyone bet. They can be checked, but not predicted.
+      Same method as BC.Game's own verifier: <a href="https://bcgame-project.github.io/verify/crash.html" target="_blank" rel="noopener">bcgame-project.github.io/verify/crash.html</a></p>
+  </div>`;
+}
+
+async function showRound(gameId, allBets = false) {
+  if (!allBets) openDrawer(`<h2>Round #${esc(gameId)}</h2><p class="muted">Loading…</p>`);
   try {
-    const { round: r, bets } = await api('/api/rounds/' + encodeURIComponent(gameId));
+    const { round: r, bets, fairness } = await api(`/api/rounds/${encodeURIComponent(gameId)}?bets=${allBets ? 100000 : 100}`);
+    const total = r.betCount ?? bets.length;
+    const more = bets.length < total
+      ? `<p class="muted">Showing the ${bets.length} biggest of ${total.toLocaleString()} bets. <button data-allbets="${esc(r.gameId)}">Show all</button></p>`
+      : '';
     openDrawer(`<h2>Round #${esc(r.gameId)} — <span class="chip ${chipCls(r.crash)}">${x(r.crash)}</span></h2>
-      <p class="muted">${time(r.startedAt)} → ${time(r.endedAt)}${r.hash ? `<br>hash: <code>${esc(r.hash)}</code>` : ''}${r.partial ? '<br>Collector joined mid-round — some bets may be missing.' : ''}</p>
+      <p class="muted">${time(r.startedAt)} → ${time(r.endedAt)}${r.partial ? '<br>Collector joined mid-round — some bets may be missing.' : ''}</p>
+      ${fairnessHtml(fairness)}
       <div class="cards">
         <div class="card"><label>Players</label><div>${r.playerCount}</div></div>
         <div class="card"><label>Winners</label><div>${r.winners}</div></div>
@@ -159,7 +227,7 @@ async function showRound(gameId) {
       <table><thead><tr><th>Player</th><th>Type</th><th class="r">Bet</th><th class="r">USD</th><th class="r">Result</th><th class="r">Profit</th></tr></thead><tbody>
       ${bets.map((b) => `<tr class="click" data-player="${esc(b.playerId)}"><td>${esc(b.name)}</td><td>${betType(b)}</td><td class="r">${num(b.amount)} ${esc(b.currency)}</td>
         <td class="r">${usd(b.usd)}</td><td class="r">${result(b)}</td><td class="r">${pnl(b.profitUsd)}</td></tr>`).join('')}
-      </tbody></table>`);
+      </tbody></table>${more}`);
   } catch {
     openDrawer('<p class="muted">Round not saved yet.</p>');
   }
@@ -190,6 +258,12 @@ async function showPlayer(id) {
 
 // Any row/chip with data-game or data-player opens the matching detail.
 document.addEventListener('click', (e) => {
+  const all = e.target.closest('[data-allbets]');
+  if (all) {
+    all.disabled = true;
+    all.textContent = 'Loading…';
+    return showRound(all.dataset.allbets, true);
+  }
   const g = e.target.closest('[data-game]');
   if (g) return showRound(g.dataset.game);
   const p = e.target.closest('[data-player]');

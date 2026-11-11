@@ -13,6 +13,7 @@
 //   { type: 'crashed',       gameId, crash }        shows the result immediately
 //   { type: 'round_end',     gameId, crash, hash?, at? }   settles and saves the round
 const { Round, Bet, Player } = require('./models');
+const fairness = require('./fairness');
 
 const r6 = (n) => Math.round(n * 1e6) / 1e6;
 const LIVE_ROWS = 500;
@@ -78,6 +79,28 @@ function createLive(io) {
       recent.unshift({ gameId: saved.gameId, crash: saved.crash });
       if (recent.length > 50) recent.length = 50;
     }
+    rememberFinished({ gameId: r.gameId, crash: r.crash, hash: r.hash });
+  }
+
+  // Last finished round + its provably-fair calculation, shown on the Live tab.
+  let lastFinished = null;
+  function rememberFinished(round) {
+    const prev = lastFinished && Number(lastFinished.gameId) === Number(round.gameId) - 1 ? lastFinished.hash : null;
+    lastFinished = { gameId: round.gameId, crash: round.crash, hash: round.hash, fairness: fairness.explain(round, prev) };
+  }
+  // On startup, seed from the newest saved round so the current round's commitment is known right away.
+  Round.findOne({ hash: { $exists: true } }, { gameId: 1, crash: 1, hash: 1 }).sort({ endedAt: -1 }).lean()
+    .then((r) => { if (r && !lastFinished) { rememberFinished(r); dirty = true; } })
+    .catch(() => {});
+
+  function fairSnapshot() {
+    const cur = current;
+    const commitment = cur && lastFinished && Number(lastFinished.gameId) === Number(cur.gameId) - 1 ? lastFinished.hash : null;
+    return {
+      salt: fairness.SALT,
+      current: cur && cur.status !== 'ended' ? { gameId: cur.gameId, status: cur.status, crash: cur.crash, commitment } : null,
+      last: lastFinished ? { gameId: lastFinished.gameId, crash: lastFinished.crash, ...lastFinished.fairness } : null,
+    };
   }
 
   async function handle(ev) {
@@ -228,7 +251,7 @@ function createLive(io) {
   }
 
   function snapshot() {
-    if (!current) return { round: null, recent };
+    if (!current) return { round: null, recent, fair: fairSnapshot() };
     const r = current;
     const bets = [...r.bets.values()].sort((a, b) => b.usd - a.usd);
     return {
@@ -247,6 +270,7 @@ function createLive(io) {
         bets: bets.slice(0, LIVE_ROWS), // biggest bets only; totals above cover all
       },
       recent,
+      fair: fairSnapshot(),
     };
   }
 
