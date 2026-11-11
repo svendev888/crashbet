@@ -13,6 +13,7 @@
       <button data-tab="live" class="active">Live</button>
       <button data-tab="rounds">Rounds</button>
       <button data-tab="players">Players</button>
+      <button data-tab="best">Best players</button>
       <button data-tab="analysis">Analysis</button>
       <button data-tab="stats">Stats</button>
     </nav>
@@ -77,6 +78,44 @@
         <tbody id="p-body"></tbody>
       </table>
       <div class="pager"><button id="p-prev">‹ Prev</button><span id="p-page"></span><button id="p-next">Next ›</button></div>
+    </section>
+
+    <!-- BEST PLAYERS -->
+    <section id="tab-best" class="tab">
+      <div class="toolbar">
+        <label>Period
+          <select id="b-days">
+            <option value="1">Last 24 h</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="0">All time</option>
+          </select>
+        </label>
+        <label>Min bets
+          <select id="b-min">
+            <option>20</option><option selected>50</option><option>100</option><option>500</option><option>1000</option>
+          </select>
+        </label>
+        <label>Rank by
+          <select id="b-sort">
+            <option value="z">Beat-the-odds score</option>
+            <option value="profitUsd">Profit</option>
+            <option value="roi">ROI</option>
+            <option value="wageredUsd">Wagered</option>
+          </select>
+        </label>
+        <span id="b-total" class="muted"></span>
+      </div>
+      <p class="muted sub best-note">Every crash bet loses 1% of its stake on average, whatever the target, so the expected result is
+        &minus;1% of what a player wagered. The <b>score</b> is how many standard deviations of pure luck a player's profit sits above that, given their
+        bet sizes and targets. <b>Odds</b> is how rare that is for one player. <b>Lucky by chance</b> is how many of the qualifying players you'd expect to
+        reach that score by luck alone: well below 1 means the result is hard to put down to luck.</p>
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th>Verdict</th><th class="r">Score</th><th class="r">Odds</th><th class="r">Lucky by chance</th>
+          <th class="r">Bets</th><th class="r">Win %</th><th class="r">Avg target</th><th class="r">Avg bet</th><th class="r">Wagered</th>
+          <th class="r">Profit</th><th class="r">ROI</th><th>Mode</th><th>Last seen</th></tr></thead>
+        <tbody id="b-body"></tbody>
+      </table>
     </section>
 
     <!-- ANALYSIS -->

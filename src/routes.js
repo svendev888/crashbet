@@ -1,6 +1,7 @@
 const express = require('express');
 const { Round, Bet, Player } = require('./models');
 const fairness = require('./fairness');
+const { bestPlayers } = require('./best');
 
 const clampInt = (v, def, min, max) => Math.min(max, Math.max(min, parseInt(v, 10) || def));
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -58,6 +59,18 @@ function createRoutes(live, ingestKey) {
       Player.find(q).sort({ [sort]: order, _id: 1 }).skip(skip).limit(limit).lean(),
     ]);
     res.json({ total, items });
+  }));
+
+  // Players ranked by how far their profit sits above what luck explains.
+  // ?days=7 (0 = all time) &minBets=50 &limit=100 &sort=z|profitUsd|roi|wageredUsd
+  r.get('/api/players/best', wrap(async (req, res) => {
+    const days = req.query.days === '0' ? 0 : clampInt(req.query.days, 7, 1, 3650);
+    res.json(await bestPlayers({
+      days,
+      minBets: clampInt(req.query.minBets, 50, 1, 1e6),
+      limit: clampInt(req.query.limit, 100, 1, 500),
+      sort: String(req.query.sort || 'z'),
+    }));
   }));
 
   r.get('/api/players/:id', wrap(async (req, res) => {

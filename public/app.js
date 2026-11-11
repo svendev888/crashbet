@@ -15,7 +15,7 @@ const chipCls = (c) => (c < 2 ? 'lo' : c < 10 ? 'mid' : 'hi');
 const api = (path) => fetch(path).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
 // ---------- tabs ----------
-const loaders = { rounds: () => loadRounds(true), players: () => loadPlayers(), stats: () => loadStats(), analysis: () => loadAnalysis() };
+const loaders = { rounds: () => loadRounds(true), players: () => loadPlayers(), best: () => loadBest(), stats: () => loadStats(), analysis: () => loadAnalysis() };
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('nav button').forEach((n) => n.classList.toggle('active', n === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
@@ -152,6 +152,43 @@ $('p-q').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout((
 $('p-sort').onchange = $('p-order').onchange = () => { playerPage = 0; loadPlayers(); };
 $('p-prev').onclick = () => { playerPage--; loadPlayers(); };
 $('p-next').onclick = () => { playerPage++; loadPlayers(); };
+
+// ---------- best players ----------
+const odds = (n) => (!isFinite(n) || n > 1e9 ? '> 1 in 1B' : n < 2 ? '–' : '1 in ' + Math.round(n).toLocaleString());
+function verdict(pl) {
+  if (pl.z >= 2 && pl.byChanceAmong < 0.05) return '<span class="tag hot">Beyond luck</span>';
+  if (pl.z >= 2) return '<span class="tag warm">Hot streak</span>';
+  if (pl.z > -2) return '<span class="tag">Normal variance</span>';
+  return '<span class="tag cold">Cold streak</span>';
+}
+async function loadBest() {
+  $('b-body').innerHTML = '<tr><td colspan="15" class="muted">Analysing bets…</td></tr>';
+  const p = new URLSearchParams({ days: $('b-days').value, minBets: $('b-min').value, sort: $('b-sort').value, limit: 100 });
+  try {
+    const { playersInPeriod, qualified, items } = await api('/api/players/best?' + p);
+    $('b-total').textContent = `${qualified.toLocaleString()} of ${playersInPeriod.toLocaleString()} players have enough bets`;
+    $('b-body').innerHTML = items.length ? items.map((pl, i) => `<tr class="click" data-player="${esc(pl._id)}">
+      <td class="muted">${i + 1}</td>
+      <td>${esc(pl.name)}</td>
+      <td>${verdict(pl)}</td>
+      <td class="r">${pl.z.toFixed(2)}</td>
+      <td class="r">${pl.z > 0 ? odds(pl.oneIn) : '–'}</td>
+      <td class="r">${pl.z > 0 ? (pl.byChanceAmong < 0.01 ? '< 0.01' : pl.byChanceAmong.toFixed(2)) : '–'}</td>
+      <td class="r">${pl.bets.toLocaleString()}</td>
+      <td class="r">${winPct(pl)}</td>
+      <td class="r">${x(pl.avgTarget)}</td>
+      <td class="r">${usd(pl.avgBetUsd)}</td>
+      <td class="r">${usd(pl.wageredUsd)}</td>
+      <td class="r">${pnl(pl.profitUsd)}</td>
+      <td class="r">${roi(pl.profitUsd, pl.wageredUsd)}</td>
+      <td>${pl.trenballBets === 0 ? 'Classic' : pl.classicBets === 0 ? 'Trenball' : `Mixed (${Math.round((pl.trenballBets / pl.bets) * 100)}% TB)`}</td>
+      <td>${time(pl.lastSeen)}</td></tr>`).join('')
+      : '<tr><td colspan="15" class="muted">No players with that many bets in this period yet.</td></tr>';
+  } catch (e) {
+    $('b-body').innerHTML = `<tr><td colspan="15" class="neg">Failed to load (${esc(e.message)}).</td></tr>`;
+  }
+}
+$('b-days').onchange = $('b-min').onchange = $('b-sort').onchange = loadBest;
 
 // ---------- stats ----------
 async function loadStats() {
