@@ -1,0 +1,14 @@
+[Unit]
+Description=Crash analytics dashboard server
+After=network-online.target mongod.service docker.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/crashbet
+ExecStart=/usr/bin/env node src/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

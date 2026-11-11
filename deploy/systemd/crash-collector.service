@@ -1,0 +1,17 @@
+[Unit]
+Description=Crash collector (Chrome on virtual display :99)
+After=crash-server.service crash-xvfb.service
+Requires=crash-xvfb.service
+Wants=crash-server.service
+
+[Service]
+WorkingDirectory=/root/crashbet
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/env node collector/bcgame.js
+Restart=always
+RestartSec=10
+# Kill Chrome child processes too when stopping/restarting
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

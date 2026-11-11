@@ -1,0 +1,10 @@
+[Unit]
+Description=Virtual display :99 for the crash collector browser
+
+[Service]
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x900x24 -nolisten tcp
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
