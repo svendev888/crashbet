@@ -266,6 +266,68 @@ function drawMoney(container, rows, field, { diverging }) {
   }, (i) => showRound(rows[i].gameId));
 }
 
+// ---------- 2x walk: +1 when a round reaches the target, -1 when it doesn't ----------
+const WALK_TARGET = 2;
+function drawWalk(container, rows) {
+  const H = 240;
+  if (!rows.length) return emptyChart(container, H, 'No rounds saved yet');
+  const { svg, width } = newChart(container, H);
+  const m = { l: 44, r: 44, t: 12, b: 22 };
+  const p = expectedRate(WALK_TARGET);
+  const drift = 2 * p - 1; // expected change per round (-0.01 at 2x)
+  const sdStep = 2 * Math.sqrt(p * (1 - p));
+  const walk = [];
+  let v = 0;
+  for (const r of rows) { v += r.crash >= WALK_TARGET ? 1 : -1; walk.push(v); }
+  const n = rows.length;
+  const exp = (k) => k * drift;
+  const band = (k) => 1.96 * sdStep * Math.sqrt(k);
+  const lo = Math.min(0, ...walk, exp(n) - band(n));
+  const hi = Math.max(0, ...walk, exp(n) + band(n));
+  const ticks = niceTicks(lo, hi).filter((t) => Number.isInteger(t));
+  const tmin = Math.min(lo, ticks[0] ?? lo);
+  const tmax = Math.max(hi, ticks[ticks.length - 1] ?? hi);
+  const y = (val) => m.t + (H - m.t - m.b) * (1 - (val - tmin) / (tmax - tmin || 1));
+  for (const t of ticks) {
+    svgEl('line', { class: t === 0 ? 'baseline' : 'gridline', x1: m.l, x2: width - m.r, y1: y(t), y2: y(t) }, svg);
+    svgEl('text', { class: 'tick', x: m.l - 6, y: y(t) + 4, 'text-anchor': 'end' }, svg).textContent = (t > 0 ? '+' : '') + t;
+  }
+  const b = bands(n, m.l, width - m.r);
+  const cx = (i) => b.at(i) + b.w / 2;
+  const x0 = b.at(0);
+  // 95% range of a fair game, around the expected drift.
+  let area = `M${x0},${y(0)}`;
+  for (let i = 0; i < n; i++) area += `L${cx(i)},${y(exp(i + 1) + band(i + 1))}`;
+  for (let i = n - 1; i >= 0; i--) area += `L${cx(i)},${y(exp(i + 1) - band(i + 1))}`;
+  svgEl('path', { d: area + 'Z', class: 'walk-band' }, svg);
+  svgEl('line', { class: 'walk-exp', x1: x0, y1: y(0), x2: cx(n - 1), y2: y(exp(n)) }, svg);
+  svgEl('line', { class: 'baseline', x1: m.l, x2: width - m.r, y1: y(0), y2: y(0) }, svg);
+  // The walk itself: a step line, flat within a round, jumping at the next one.
+  let d = `M${x0},${y(0)}`;
+  walk.forEach((val, i) => { d += `V${y(val)}H${i + 1 < n ? cx(i + 1) : cx(i)}`; });
+  const color = css('--series-1');
+  svgEl('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  const last = walk[n - 1];
+  svgEl('text', { class: 'endlabel', x: cx(n - 1) + 6, y: y(last) + 4 }, svg).textContent = (last > 0 ? '+' : '') + last;
+  axisDates(svg, rows, b, H - 6);
+  const dot = svgEl('circle', { r: 4, fill: color, stroke: css('--panel'), 'stroke-width': 2, visibility: 'hidden', 'pointer-events': 'none' }, svg);
+  columnHover(svg, n, b, m.t, H - m.b, (evt, i) => {
+    const r = rows[i];
+    const hit = r.crash >= WALK_TARGET;
+    dot.setAttribute('cx', cx(i));
+    dot.setAttribute('cy', y(walk[i]));
+    dot.setAttribute('visibility', 'visible');
+    showTip(evt, `Round #${r.gameId} · ${time(r.endedAt)}`, [
+      { value: `${x(r.crash)}  ${hit ? '+1' : '−1'}`, label: hit ? `reached ${WALK_TARGET}x` : `below ${WALK_TARGET}x` },
+      { value: (walk[i] > 0 ? '+' : '') + walk[i], label: 'running total', color },
+      { value: exp(i + 1).toFixed(1), label: `fair expectation (95%: ${(exp(i + 1) - band(i + 1)).toFixed(0)} to +${(exp(i + 1) + band(i + 1)).toFixed(0)})` },
+    ]);
+  }, (i) => showRound(rows[i].gameId));
+  svg.addEventListener('pointerleave', () => dot.setAttribute('visibility', 'hidden'));
+  const ups = walk.length ? rows.filter((r) => r.crash >= WALK_TARGET).length : 0;
+  $('a-walk-sum').textContent = `${ups.toLocaleString()} up, ${(n - ups).toLocaleString()} down → ${(last > 0 ? '+' : '') + last}`;
+}
+
 // ---------- tiles & threshold table ----------
 function drawTiles(rows) {
   const n = rows.length;
@@ -309,6 +371,7 @@ function renderAnalysis() {
   const rows = analysisRows;
   drawTiles(rows);
   drawHistory($('a-history'), rows);
+  drawWalk($('a-walk'), rows);
   drawSurvival($('a-survival'), rows);
   drawMoney($('a-pnl'), rows, 'playersProfitUsd', { diverging: true });
   drawMoney($('a-wager'), rows, 'wageredUsd', { diverging: false });

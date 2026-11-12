@@ -141,6 +141,13 @@
       </div>
 
       <div class="chart-card">
+        <h3>2x up / down count <span id="a-walk-sum" class="muted walk-sum"></span></h3>
+        <p class="muted sub">Goes up 1 when a round crashes at 2.00x or higher (a 2x bet wins), down 1 when it crashes lower. In a fair game it drifts down slightly (−1 per 100 rounds) and usually stays inside the shaded range. Click to open a round.</p>
+        <div class="legend"><span><i class="key s1"></i>Running total</span><span><i class="key dash"></i>Fair expectation</span><span><i class="swatch band"></i>95% range</span></div>
+        <div id="a-walk" class="chart"></div>
+      </div>
+
+      <div class="chart-card">
         <h3>How often each multiplier is reached</h3>
         <p class="muted sub">Share of rounds that reached at least x, compared with the provably-fair expectation (99% ÷ x).</p>
         <div class="legend"><span><i class="key s1"></i>Observed</span><span><i class="key s2"></i>Expected</span></div>

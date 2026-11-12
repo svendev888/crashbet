@@ -77,6 +77,11 @@ button:hover { border-color: var(--accent); }
 .tip .tr { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
 .tip .tl { color: var(--muted); }
 .tip .key { display: inline-block; width: 12px; height: 2px; }
+.chart .walk-band { fill: var(--series-2); opacity: .12; }
+.chart .walk-exp { stroke: var(--series-2); stroke-width: 2; stroke-dasharray: 5 4; }
+.legend .key.dash { background: repeating-linear-gradient(90deg, var(--series-2) 0 5px, transparent 5px 9px); }
+.legend .swatch.band { background: var(--series-2); opacity: .25; }
+.walk-sum { font-size: 12px; font-weight: 400; margin-left: 8px; }
 /* ---------- provably fair panel ---------- */
 .fair { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
 .fair h3 { margin: 0 0 8px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
