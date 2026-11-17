@@ -192,8 +192,12 @@ $('b-days').onchange = $('b-min').onchange = $('b-sort').onchange = loadBest;
 
 // ---------- stats ----------
 async function loadStats() {
-  const { totals: t, buckets, players } = await api('/api/stats');
-  const card = (label, v) => `<div class="card"><label>${label}</label><div>${v}</div></div>`;
+  const { totals: t, buckets, players, under2 } = await api('/api/stats');
+  const card = (label, v, sub) => `<div class="card"><label>${label}</label><div>${v}</div>${sub ? `<small class="muted">${sub}</small>` : ''}</div>`;
+  const lg = under2?.longest || {};
+  const lgSub = lg.length
+    ? `rounds ${esc(lg.fromGameId)}–${esc(lg.toGameId)}, ${new Date(lg.to).toLocaleString()} · current run: ${under2.current}`
+    : '';
   $('s-cards').innerHTML = [
     card('Rounds recorded', (t.rounds || 0).toLocaleString()),
     card('Players seen', players.toLocaleString()),
@@ -204,6 +208,7 @@ async function loadStats() {
     card('House edge observed', t.wageredUsd ? ((-t.playersProfitUsd / t.wageredUsd) * 100).toFixed(2) + '%' : '–'),
     card('Average crash', x(t.avgCrash)),
     card('Highest crash', x(t.maxCrash)),
+    card('Longest run under 2x', lg.length ? `${lg.length} rounds` : '–', lgSub),
   ].join('');
   const labels = { 0: '1.00x', 1.01: '1.01–1.5x', 1.5: '1.5–2x', 2: '2–3x', 3: '3–5x', 5: '5–10x', 10: '10–100x', '100+': '100x+' };
   const total = buckets.reduce((s, b) => s + b.count, 0) || 1;

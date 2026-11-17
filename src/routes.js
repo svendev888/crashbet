@@ -110,10 +110,37 @@ function createRoutes(live, ingestKey) {
       output: { count: { $sum: 1 } },
     } }]);
     const players = await Player.estimatedDocumentCount();
-    res.json({ totals: totals || { rounds: 0 }, buckets, players });
+    const under2 = await longestRunUnder(2);
+    res.json({ totals: totals || { rounds: 0 }, buckets, players, under2 });
   }));
 
   return r;
 }
 
-module.exports = { createRoutes };
+// Longest run of consecutive rounds that crashed below `limit`, oldest to newest.
+// A gap in game IDs (collector was offline) ends the run, since the missed
+// rounds are unknown.
+async function longestRunUnder(limit) {
+  const cur = Round.find({ crash: { $ne: null } }, { _id: 0, gameId: 1, crash: 1, endedAt: 1 })
+    .sort({ endedAt: 1 }).lean().cursor();
+  let best = { length: 0 };
+  let run = null;
+  let prevId = null;
+  for await (const r of cur) {
+    const id = Number(r.gameId);
+    if (run && !(id === prevId + 1)) run = null;
+    prevId = id;
+    if (r.crash < limit) {
+      if (!run) run = { length: 0, fromGameId: r.gameId, from: r.endedAt };
+      run.length++;
+      run.toGameId = r.gameId;
+      run.to = r.endedAt;
+      if (run.length > best.length) best = { ...run };
+    } else {
+      run = null;
+    }
+  }
+  return { limit, longest: best, current: run ? run.length : 0 };
+}
+
+module.exports = { createRoutes, longestRunUnder };
