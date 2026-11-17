@@ -192,7 +192,8 @@ $('b-days').onchange = $('b-min').onchange = $('b-sort').onchange = loadBest;
 
 // ---------- stats ----------
 async function loadStats() {
-  const { totals: t, buckets, players, under2 } = await api('/api/stats');
+  const { totals: t, buckets, players, under2 } = await api('/api/stats?runMin=' + encodeURIComponent($('s-runmin').value));
+  renderLongRuns(under2);
   const card = (label, v, sub) => `<div class="card"><label>${label}</label><div>${v}</div>${sub ? `<small class="muted">${sub}</small>` : ''}</div>`;
   const lg = under2?.longest || {};
   const lgSub = lg.length
@@ -216,6 +217,27 @@ async function loadStats() {
   $('s-dist').innerHTML = buckets.map((b) => `<div class="bar"><span>${labels[b._id] ?? b._id}</span>
     <i style="width:${(b.count / max) * 100}%"></i><span class="muted">${b.count} (${((b.count / total) * 100).toFixed(1)}%)</span></div>`).join('');
 }
+
+// Most recent runs of at least N rounds in a row that crashed below 2x.
+function renderLongRuns(u) {
+  if (!u || !u.recent) { $('s-runs').innerHTML = ''; $('s-runs-info').textContent = ''; return; }
+  const freq = u.longRuns ? ` · about 1 per ${Math.round(u.rounds / u.longRuns).toLocaleString()} rounds` : '';
+  $('s-runs-info').textContent = `${u.longRuns.toLocaleString()} run${u.longRuns === 1 ? '' : 's'} of ${u.minLen}+ in ${u.rounds.toLocaleString()} rounds${freq}`;
+  $('s-runs').innerHTML = u.recent.length
+    ? u.recent.map((r) => `<tr>
+        <td>${time(r.to)}</td>
+        <td class="r"><b>${r.length}</b>${r.ongoing ? ' <span class="neg">ongoing</span>' : ''}</td>
+        <td><a href="#" data-round="${esc(r.fromGameId)}">#${esc(r.fromGameId)}</a> – <a href="#" data-round="${esc(r.toGameId)}">#${esc(r.toGameId)}</a></td>
+        <td class="r">${r.roundsAgo.toLocaleString()}</td></tr>`).join('')
+    : `<tr><td colspan="4" class="muted">No runs of ${u.minLen}+ rounds under 2x recorded yet.</td></tr>`;
+}
+$('s-runs').onclick = (e) => {
+  const a = e.target.closest('a[data-round]');
+  if (!a) return;
+  e.preventDefault();
+  showRound(a.dataset.round);
+};
+$('s-runmin').onchange = loadStats;
 
 // ---------- detail drawer ----------
 function openDrawer(html) { $('d-body').innerHTML = html; $('drawer').hidden = false; }

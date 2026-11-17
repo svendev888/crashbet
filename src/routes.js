@@ -110,26 +110,42 @@ function createRoutes(live, ingestKey) {
       output: { count: { $sum: 1 } },
     } }]);
     const players = await Player.estimatedDocumentCount();
-    const under2 = await longestRunUnder(2);
+    const under2 = await longestRunUnder(2, clampInt(req.query.runMin, 10, 2, 1000));
     res.json({ totals: totals || { rounds: 0 }, buckets, players, under2 });
   }));
 
   return r;
 }
 
-// Longest run of consecutive rounds that crashed below `limit`, oldest to newest.
-// A gap in game IDs (collector was offline) ends the run, since the missed
-// rounds are unknown.
-async function longestRunUnder(limit) {
+// Runs of consecutive rounds that crashed below `limit`, oldest to newest:
+// the longest run, the current one, and the most recent runs of at least
+// `minLen` rounds. A gap in game IDs (collector was offline) ends a run,
+// since the missed rounds are unknown.
+const RECENT_RUNS = 30;
+async function longestRunUnder(limit, minLen = 10) {
   const cur = Round.find({ crash: { $ne: null } }, { _id: 0, gameId: 1, crash: 1, endedAt: 1 })
     .sort({ endedAt: 1 }).lean().cursor();
   let best = { length: 0 };
   let run = null;
   let prevId = null;
+  let rounds = 0;
+  let lastGameId = null;
+  let longRuns = 0;
+  const recent = [];
+  const close = () => {
+    if (run && run.length >= minLen) {
+      longRuns++;
+      recent.push(run);
+      if (recent.length > RECENT_RUNS) recent.shift();
+    }
+    run = null;
+  };
   for await (const r of cur) {
     const id = Number(r.gameId);
-    if (run && !(id === prevId + 1)) run = null;
+    if (run && !(id === prevId + 1)) close();
     prevId = id;
+    rounds++;
+    lastGameId = r.gameId;
     if (r.crash < limit) {
       if (!run) run = { length: 0, fromGameId: r.gameId, from: r.endedAt };
       run.length++;
@@ -137,10 +153,21 @@ async function longestRunUnder(limit) {
       run.to = r.endedAt;
       if (run.length > best.length) best = { ...run };
     } else {
-      run = null;
+      close();
     }
   }
-  return { limit, longest: best, current: run ? run.length : 0 };
+  const current = run ? run.length : 0;
+  if (run && run.length >= minLen) { run.ongoing = true; longRuns++; recent.push(run); }
+  const ago = (g) => Number(lastGameId) - Number(g);
+  return {
+    limit,
+    longest: best,
+    current,
+    minLen,
+    rounds,
+    longRuns,
+    recent: recent.reverse().slice(0, RECENT_RUNS).map((x) => ({ ...x, roundsAgo: ago(x.toGameId) })),
+  };
 }
 
 module.exports = { createRoutes, longestRunUnder };

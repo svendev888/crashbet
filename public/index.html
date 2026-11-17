@@ -180,6 +180,15 @@
     <!-- STATS -->
     <section id="tab-stats" class="tab">
       <div class="cards" id="s-cards"></div>
+      <h3>Recent long runs under 2x</h3>
+      <div class="toolbar">
+        <label>At least <input id="s-runmin" type="number" min="2" max="1000" value="10" style="width:64px"> rounds in a row</label>
+        <span id="s-runs-info" class="muted"></span>
+      </div>
+      <table>
+        <thead><tr><th>Ended</th><th class="r">Rounds under 2x</th><th>Rounds</th><th class="r">Rounds ago</th></tr></thead>
+        <tbody id="s-runs"></tbody>
+      </table>
       <h3>Crash point distribution</h3>
       <div id="s-dist" class="dist"></div>
     </section>
