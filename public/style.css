@@ -82,6 +82,9 @@ button:hover { border-color: var(--accent); }
 .legend .key.dash { background: repeating-linear-gradient(90deg, var(--series-2) 0 5px, transparent 5px 9px); }
 .legend .swatch.band { background: var(--series-2); opacity: .25; }
 .walk-sum { font-size: 12px; font-weight: 400; margin-left: 8px; }
+.chart .walk-sel { fill: var(--series-1); opacity: .14; }
+.walk-sel-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; margin-top: 6px; min-height: 26px; font-variant-numeric: tabular-nums; }
+.walk-sel-info button { margin-left: auto; font-size: 12px; padding: 2px 10px; }
 /* ---------- provably fair panel ---------- */
 .fair { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
 .fair h3 { margin: 0 0 8px; font-size: 15px; display: flex; align-items: center; gap: 8px; }

@@ -119,6 +119,7 @@ function columnHover(svg, n, b, top, bottom, onHover, onClick) {
   });
   hit.addEventListener('pointerleave', () => { hair.setAttribute('visibility', 'hidden'); hideTip(); });
   if (onClick) hit.addEventListener('click', (evt) => onClick(idxAt(evt)));
+  return { hit, idxAt };
 }
 
 // ---------- 1. crash point per round (log scale) ----------
@@ -311,7 +312,20 @@ function drawWalk(container, rows) {
   svgEl('text', { class: 'endlabel', x: cx(n - 1) + 6, y: y(last) + 4 }, svg).textContent = (last > 0 ? '+' : '') + last;
   axisDates(svg, rows, b, H - 6);
   const dot = svgEl('circle', { r: 4, fill: color, stroke: css('--panel'), 'stroke-width': 2, visibility: 'hidden', 'pointer-events': 'none' }, svg);
-  columnHover(svg, n, b, m.t, H - m.b, (evt, i) => {
+  const selRect = svgEl('rect', { class: 'walk-sel', y: m.t, height: H - m.t - m.b, visibility: 'hidden', 'pointer-events': 'none' }, svg);
+  const showSel = (i, j) => {
+    const [a, z] = i <= j ? [i, j] : [j, i];
+    selRect.setAttribute('x', b.at(a) - (b.slot - b.w) / 2);
+    selRect.setAttribute('width', b.slot * (z - a + 1));
+    selRect.setAttribute('visibility', 'visible');
+  };
+  let dragFrom = null;
+  let dragged = false;
+  const { hit, idxAt } = columnHover(svg, n, b, m.t, H - m.b, (evt, i) => {
+    if (dragFrom != null) {
+      if (i !== dragFrom) dragged = true;
+      if (dragged) { showSel(dragFrom, i); hideTip(); return; }
+    }
     const r = rows[i];
     const hit = r.crash >= WALK_TARGET;
     dot.setAttribute('cx', cx(i));
@@ -322,11 +336,78 @@ function drawWalk(container, rows) {
       { value: (walk[i] > 0 ? '+' : '') + walk[i], label: 'running total', color },
       { value: exp(i + 1).toFixed(1), label: `fair expectation (95%: ${(exp(i + 1) - band(i + 1)).toFixed(0)} to +${(exp(i + 1) + band(i + 1)).toFixed(0)})` },
     ]);
-  }, (i) => showRound(rows[i].gameId));
+  }, (i) => { if (dragged) { dragged = false; return; } showRound(rows[i].gameId); });
   svg.addEventListener('pointerleave', () => dot.setAttribute('visibility', 'hidden'));
+
+  // Drag across the chart to select a period; its counts show under the chart.
+  hit.style.touchAction = 'pan-y';
+  hit.addEventListener('pointerdown', (evt) => {
+    if (evt.button !== 0) return;
+    dragFrom = idxAt(evt);
+    dragged = false;
+    hit.setPointerCapture(evt.pointerId);
+  });
+  const endDrag = (evt) => {
+    if (dragFrom == null) return;
+    const to = idxAt(evt);
+    if (dragged) {
+      const [a, z] = dragFrom <= to ? [dragFrom, to] : [to, dragFrom];
+      walkSel = { from: rows[a].gameId, to: rows[z].gameId };
+      renderWalkSel(rows, walk);
+    }
+    dragFrom = null;
+  };
+  hit.addEventListener('pointerup', endDrag);
+  hit.addEventListener('pointercancel', () => { dragFrom = null; dragged = false; });
+
+  // Keep a saved selection after redraws (resize, new round).
+  const sel = walkSelIdx(rows);
+  if (sel) showSel(sel[0], sel[1]);
+  renderWalkSel(rows, walk);
+
   const ups = walk.length ? rows.filter((r) => r.crash >= WALK_TARGET).length : 0;
   $('a-walk-sum').textContent = `${ups.toLocaleString()} up, ${(n - ups).toLocaleString()} down → ${(last > 0 ? '+' : '') + last}`;
 }
+
+// Selected period on the 2x chart, kept by game ID so it survives live refreshes.
+let walkSel = null;
+function walkSelIdx(rows) {
+  if (!walkSel) return null;
+  const a = rows.findIndex((r) => r.gameId === walkSel.from);
+  const z = rows.findIndex((r) => r.gameId === walkSel.to);
+  return a < 0 || z < 0 ? null : [a, z];
+}
+function renderWalkSel(rows, walk) {
+  const box = $('a-walk-sel');
+  const idx = walkSelIdx(rows);
+  if (!idx) {
+    if (walkSel && rows.length) walkSel = null; // selected rounds dropped out of the loaded range
+    box.innerHTML = '<span class="muted">Drag across the chart to select a period.</span>';
+    return;
+  }
+  const [a, z] = idx;
+  const part = rows.slice(a, z + 1);
+  const ups = part.filter((r) => r.crash >= WALK_TARGET).length;
+  const downs = part.length - ups;
+  const net = walk[z] - (a > 0 ? walk[a - 1] : 0);
+  let run = 0;
+  let longest = 0;
+  for (const r of part) { if (r.crash < WALK_TARGET) longest = Math.max(longest, ++run); else run = 0; }
+  const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString();
+  box.innerHTML = `<b>Selected ${part.length.toLocaleString()} rounds</b>
+    <span class="muted">#${esc(part[0].gameId)} – #${esc(part[part.length - 1].gameId)} · ${time(part[0].endedAt)} → ${time(part[part.length - 1].endedAt)}</span>
+    <span><span class="pos">${ups.toLocaleString()} up</span> · <span class="neg">${downs.toLocaleString()} down</span> → <b>${sign(net)}</b></span>
+    <span>Reached 2x ${((ups / part.length) * 100).toFixed(1)}%</span>
+    <span>Longest run under 2x: <b>${longest.toLocaleString()}</b></span>
+    <button type="button" id="a-walk-clear">Clear</button>`;
+  $('a-walk-clear').onclick = clearWalkSel;
+}
+function clearWalkSel() {
+  if (!walkSel) return;
+  walkSel = null;
+  drawWalk($('a-walk'), analysisRows);
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && analysisActive()) clearWalkSel(); });
 
 // ---------- tiles & threshold table ----------
 function drawTiles(rows) {
