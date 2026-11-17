@@ -34,7 +34,20 @@ function main () {
     }
 
     var amount = bet;
-    game.bet(amount, payout).then(function (result) {
+    // A bet sent too late is rejected ("Bet suspended. The game has started.").
+    // Without a handler that error stops the script, so log it and retry the
+    // same amount next round; a rejected bet is not a loss.
+    function skipped (err) {
+      log.info('Bet ' + amount + ' not placed (' + ((err && err.message) || err) + '). Retrying next round.');
+    }
+    var placed;
+    try {
+      placed = game.bet(amount, payout);
+    } catch (err) {
+      skipped(err);
+      return;
+    }
+    placed.then(function (result) {
       if (result > 1) {
         profit = round8(profit + amount * (payout - 1));
         log.success('WIN ' + amount + ' at ' + payout + 'x after ' + streak + ' losses. Profit: ' + profit);
@@ -54,6 +67,6 @@ function main () {
 
       if (config.stopProfit.value > 0 && profit >= config.stopProfit.value) stop('Profit target reached: ' + profit);
       else if (config.stopLoss.value > 0 && -profit >= config.stopLoss.value) stop('Stop loss reached: ' + profit);
-    });
+    }, skipped);
   };
 }
